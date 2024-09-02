@@ -77,12 +77,12 @@ export function App() {
       let prompt = selectedTheme.promptTemplate
       selectedTheme.fields.forEach(field => {
         if (!inputs[field]) throw new Error(`${field}が入力されていません。`)
-        prompt = prompt.replace(`{${field}}`, inputs[field])
+        prompt = prompt.replace(new RegExp(`\\{${field}\\}`, 'g'), inputs[field])
       })
       setGeneratedPrompt(prompt)
       setIsDialogOpen(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "プロ��プトの生成中にエラーが発生しました。")
+      setError(err instanceof Error ? err.message : "プロンプトの生成中にエラーが発生しました。")
     }
   }
 
