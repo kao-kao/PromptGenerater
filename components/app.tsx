@@ -119,7 +119,7 @@ export function App() {
   const handleAddTheme = async () => {
     try {
       if (!newTheme.name) throw new Error("テーマ名を入力してください。")
-      if (newTheme.fields.some(f => !f)) throw new Error("すべてのフィールドを入力してください。")
+      if (newTheme.fields.every(f => !f)) throw new Error("少なくとも1つのフィールドを入力してください。")
       if (!newTheme.promptTemplate) throw new Error("プロンプトテンプレートを入力してください。")
 
       const { data, error } = await supabase
@@ -139,21 +139,21 @@ export function App() {
       setNewTheme({ name: "", fields: ["", "", ""], promptTemplate: "" })
       setIsAddThemeDialogOpen(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "テーマの追加中にエラーが発生���ました。")
+      setError(err instanceof Error ? err.message : "テーマの追加中にエラーが発生しました。")
     }
   }
 
   const handleEditTheme = async () => {
     try {
       if (!editingTheme || !editingTheme.name) throw new Error("テーマ名を入力してください。")
-      if (editingTheme.fields.some(f => !f)) throw new Error("すべてのフィールドを入力してください。")
+      if (editingTheme.fields.every(f => !f)) throw new Error("少なくとも1つのフィールドを入力してください。")
       if (!editingTheme.promptTemplate) throw new Error("プロンプトテンプレートを入力してください。")
 
       const { data, error } = await supabase
         .from('themes')
         .update({
           name: editingTheme.name,
-          fields: editingTheme.fields,
+          fields: editingTheme.fields.filter(f => f !== ""),
           prompt_template: editingTheme.promptTemplate
         })
         .eq('id', editingTheme.id)
