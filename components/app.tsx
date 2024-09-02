@@ -19,7 +19,7 @@ interface Theme {
   id: number;
   name: string;
   fields: string[];
-  promptTemplate: string;
+  promptTemplate: string; // この名前がデータベースのカラム名と一致していることを確認
 }
 
 export function App() {
@@ -45,7 +45,11 @@ export function App() {
           .from('themes')
           .select('*')
         if (error) throw error
-        setThemes(data)
+        const formattedData = data.map(theme => ({
+          ...theme,
+          promptTemplate: theme.prompt_template
+        }))
+        setThemes(formattedData)
       } catch (err) {
         setError(err instanceof Error ? err.message : "テーマの読み込み中にエラーが発生しました。")
       }
@@ -58,6 +62,8 @@ export function App() {
     try {
       const theme = themes.find(t => t.id === parseInt(themeId))
       if (!theme) throw new Error("選択されたテーマが見つかりません。")
+      if (!theme.promptTemplate) throw new Error("選択されたテーマにプロンプトテンプレートが設定されていません。")
+      console.log('Selected theme:', theme) // デバッグ用ログ
       setSelectedTheme(theme)
       setInputs({})
       setGeneratedPrompt("")
@@ -74,6 +80,7 @@ export function App() {
   const generatePrompt = () => {
     try {
       if (!selectedTheme) throw new Error("テーマが選択されていません。")
+      if (!selectedTheme.promptTemplate) throw new Error("プロンプトテンプレートが設定されていません。")
       let prompt = selectedTheme.promptTemplate
       selectedTheme.fields.forEach(field => {
         if (!inputs[field]) throw new Error(`${field}が入力されていません。`)
@@ -233,6 +240,7 @@ export function App() {
                         <Label htmlFor={field} className="text-sm font-medium">{field}</Label>
                         <Input
                           id={field}
+                          name={field}
                           value={inputs[field] || ''}
                           onChange={(e) => handleInputChange(field, e.target.value)}
                           placeholder={`${field}を入力`}
