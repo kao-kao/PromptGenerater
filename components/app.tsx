@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { ClipboardCopy, Plus, Edit, Trash2, Wand2, AlertTriangle } from 'lucide-react'
+import { ClipboardCopy, Plus, Edit, Trash2, Wand2, AlertTriangle, Star } from 'lucide-react'
 import { supabase } from '@/lib/supabaseClient'
 
 // Theme インターフェースの定義
@@ -19,7 +19,8 @@ interface Theme {
   id: number;
   name: string;
   fields: string[];
-  promptTemplate: string; // この名前がデータベースのカラム名と一致していることを確認
+  promptTemplate: string;
+  usage_count: number;
 }
 
 export function App() {
@@ -37,6 +38,7 @@ export function App() {
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
   const [password, setPassword] = useState("")
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isResetConfirmDialogOpen, setIsResetConfirmDialogOpen] = useState(false)
 
   useEffect(() => {
     const loadThemes = async () => {
@@ -77,17 +79,29 @@ export function App() {
     setInputs(prev => ({ ...prev, [field]: value }))
   }
 
-  const generatePrompt = () => {
+  const generatePrompt = async () => {
     try {
       if (!selectedTheme) throw new Error("テーマが選択されていません。")
       if (!selectedTheme.promptTemplate) throw new Error("プロンプトテンプレートが設定されていません。")
       let prompt = selectedTheme.promptTemplate
       selectedTheme.fields.forEach(field => {
-        if (!inputs[field]) throw new Error(`${field}が入力されていません。`)
+        if (!inputs[field]) throw new Error(`${field}が力されていません。`)
         prompt = prompt.replace(new RegExp(`\\{${field}\\}`, 'g'), inputs[field])
       })
       setGeneratedPrompt(prompt)
       setIsDialogOpen(false)
+
+      // usage_countをインクリメント
+      const { data, error } = await supabase
+        .from('themes')
+        .update({ usage_count: selectedTheme.usage_count + 1 })
+        .eq('id', selectedTheme.id)
+        .select()
+
+      if (error) throw error
+
+      // 更新されたテーマを反映
+      setThemes(themes.map(theme => theme.id === selectedTheme.id ? data[0] : theme))
     } catch (err) {
       setError(err instanceof Error ? err.message : "プロンプトの生成中にエラーが発生しました。")
     }
@@ -125,7 +139,7 @@ export function App() {
       setNewTheme({ name: "", fields: ["", "", ""], promptTemplate: "" })
       setIsAddThemeDialogOpen(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "テーマの追加中にエラーが発生しました。")
+      setError(err instanceof Error ? err.message : "テーマの追加中にエラーが発生���ました。")
     }
   }
 
@@ -198,6 +212,44 @@ export function App() {
     setPassword("")
   }
 
+  const handleResetUsageCount = () => {
+    setIsResetConfirmDialogOpen(true)
+  }
+
+  const confirmResetUsageCount = async () => {
+    try {
+      // 全てのテーマを取得
+      const { data: themesToUpdate, error: fetchError } = await supabase
+        .from('themes')
+        .select('id')
+
+      if (fetchError) throw fetchError
+
+      // 各テーマの使用回数を個別に更新
+      for (const theme of themesToUpdate) {
+        const { error: updateError } = await supabase
+          .from('themes')
+          .update({ usage_count: 0 })
+          .eq('id', theme.id)
+
+        if (updateError) throw updateError
+      }
+
+      // すべてのテーマの使用回数を0にリセット（ローカルステート）
+      setThemes(themes.map(theme => ({ ...theme, usage_count: 0 })))
+      setIsResetConfirmDialogOpen(false)
+    } catch (err) {
+      console.error('Reset error:', err)
+      setError(err instanceof Error ? err.message : "使用回数のリセット中にエラーが発生しました。")
+    }
+  }
+
+  const getTopThemes = () => {
+    return themes
+      .sort((a, b) => b.usage_count - a.usage_count)
+      .slice(0, 3)
+  }
+
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       <h1 className="text-4xl font-bold mb-8 text-center text-primary">Webプロンプト自動生成アプリ</h1>
@@ -209,6 +261,36 @@ export function App() {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold mb-4 text-center">人気テーマランキング</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {getTopThemes().map((theme, index) => (
+            <Card key={theme.id} className="shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xl font-bold flex items-center h-16">
+                  <span className={`text-2xl font-extrabold mr-2 ${index === 0 ? 'text-yellow-400' : index === 1 ? 'text-gray-400' : 'text-orange-400'}`}>
+                    {index + 1}
+                  </span>
+                  <span className="line-clamp-2">{theme.name}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex-grow">
+                <p className="text-sm text-gray-600 mb-2">使用回数: {theme.usage_count}</p>
+              </CardContent>
+              <CardFooter className="pt-2">
+                <Button 
+                  onClick={() => handleThemeChange(theme.id.toString())} 
+                  className="w-full bg-gradient-to-r from-primary to-primary-dark hover:from-primary-dark hover:to-primary transition-all duration-300"
+                >
+                  <Star className="mr-2 h-4 w-4" />
+                  このテーマを選択
+                </Button>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
@@ -283,14 +365,15 @@ export function App() {
             <Card>
               <CardHeader>
                 <CardTitle>テーマ管理</CardTitle>
-                <CardDescription>テーマの追加、編集、削除ができます</CardDescription>
+                <CardDescription>テーマの追加、編集、削除、使用回数のリセットができます</CardDescription>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[300px] w-full rounded-md border p-4">
                   {themes.map(theme => (
                     <div key={theme.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
                       <span className="font-medium">{theme.name}</span>
-                      <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm text-gray-600">使用回数: {theme.usage_count}</span>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -314,10 +397,15 @@ export function App() {
                 </ScrollArea>
               </CardContent>
               <CardFooter>
-                <Button onClick={() => setIsAddThemeDialogOpen(true)} className="w-full">
-                  <Plus className="mr-2 h-4 w-4" />
-                  新しいテーマを追加
-                </Button>
+                <div className="w-full flex justify-between">
+                  <Button onClick={() => setIsAddThemeDialogOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    新しいテーマを追加
+                  </Button>
+                  <Button onClick={handleResetUsageCount} variant="outline">
+                    全テーマの使用回数をリセット
+                  </Button>
+                </div>
               </CardFooter>
             </Card>
           ) : (
@@ -449,6 +537,34 @@ export function App() {
           </div>
           <DialogFooter>
             <Button onClick={handlePasswordSubmit}>認証</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isResetConfirmDialogOpen} onOpenChange={setIsResetConfirmDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>使用回数のリセット確認</DialogTitle>
+            <DialogDescription>全てのテーマの使用回数をリセットしてもよろしいですか？</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="パスワードを入力"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsResetConfirmDialogOpen(false)}>キャンセル</Button>
+            <Button onClick={() => {
+              if (password === "0411") {
+                confirmResetUsageCount()
+                setPassword("")
+              } else {
+                setError("パスワードが正しくありません。")
+              }
+            }}>リセット</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
